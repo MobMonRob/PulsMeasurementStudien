@@ -213,14 +213,16 @@ def show_camera(cameras):
 
     #counter to detect defect cameras            
     failed_frame_counter = 0
-    out = None
+    frames = []
+    start_record_time = None
+  
     while(True):
         frame_start = time.time()
         ret, frame = camera.read()
         if ret:
             failed_frame_counter = 0
             if recording:
-                out.write(frame)
+                frames.append(np.copy(frame))
 
             if overlay:
                 cv2.putText(frame, 'FPS:'+str(round(1 / average(frame_times), 1)),
@@ -231,7 +233,7 @@ def show_camera(cameras):
                     cv2.putText(frame, text,
                                 (width-font_margin - text_size[0][0], font_margin), font, font_scale, font_color, font_thickness, cv2.LINE_AA)
             cv2.imshow(WINDOW_NAME, frame)
-            #calculate frame time
+            #save frame time
             frame_times.append((time.time() - frame_start))
         else:
             #cam not working
@@ -239,7 +241,6 @@ def show_camera(cameras):
             if failed_frame_counter > 100:
                 #this is garbage we have to create a class to handle this
                 if recording:
-                    out.release()
                     recording = False
                 #remove the malfunctionig camera
                 cameras.remove(camera)
@@ -253,12 +254,19 @@ def show_camera(cameras):
         key_pressed = cv2.waitKey(1)
         if key_pressed == 32:  # space (start/stop recording)
             if recording:
-                out.release()
-            else:
+                record_time = time.time() - start_record_time
+
                 date = datetime.datetime.fromtimestamp(
                     time.time()).strftime('%Y_%m_%d-%H_%M_%S')
-                out = cv2.VideoWriter(date + '.avi', fourcc, int(1 / average(frame_times)),
+                out = cv2.VideoWriter(date + '.avi', fourcc, int(len(frames)/record_time),
                                         (width, height), isColor=camera.is_color())
+
+                for frame in frames:
+                    out.write(frame)
+                out.release()
+            else:
+                frames.clear()
+                start_record_time = time.time()
             recording = not recording
         elif key_pressed == 111:  # 'o' (toogle overlay)
             overlay = not overlay
@@ -275,8 +283,6 @@ def show_camera(cameras):
             frame_times.clear()
 
     # Release everything
-    if out != None:
-        out.release()
     cv2.destroyAllWindows()
 
 
@@ -288,7 +294,7 @@ def average(lst):
 
 if __name__ == '__main__':
     cameras = get_available_cameras()
-    
+
     for camera in cameras:
         camera.open()
 
