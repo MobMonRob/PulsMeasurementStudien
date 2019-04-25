@@ -183,35 +183,6 @@ def get_available_cameras():
 
     return cameras
 
-
-def choose_camera(cameras):
-    FRAME_WIDTH = 640
-    FRAME_HEIGHT = 480
-    cam_index = 0
-    camera = cameras[0]
-    while True:
-        ret, frame = camera.read()
-        if(ret != False):
-            # resize output so that all cameras have the same output resolution
-            frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT),
-                               interpolation=cv2.INTER_CUBIC)
-
-            cv2.imshow(
-                'Choose a camera. NEXT :\'Space\' ACCEPT = \'Enter\'', frame)
-
-        key_pressed = cv2.waitKey(1)
-
-        if key_pressed == 13:  # enter
-            cv2.destroyAllWindows()
-            return cam_index % len(cameras)
-        elif key_pressed == 32:  # space
-            cam_index += 1
-            camera = cameras[cam_index % len(cameras)]
-
-    cv2.destroyAllWindows()
-    return 'None'
-
-
 def show_camera(cameras):
     #initialize window
     WINDOW_NAME = 'Cameras'
@@ -317,13 +288,8 @@ def average(lst):
 
 if __name__ == '__main__':
     cameras = get_available_cameras()
+    
     for camera in cameras:
         camera.open()
-
-    # choosen_camera = cameras[choose_camera(cameras)]
-
-    # for camera in cameras:
-    #     if(camera != choosen_camera):
-    #         camera.release()
 
     show_camera(cameras)
