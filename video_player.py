@@ -69,7 +69,7 @@ class VideoPlayer():
                     self.add_overlay_to_frame(frame)
 
                 cv2.imshow(self.window_name, frame)
-                cv2.waitKey(1)
+                #cv2.waitKey(1)
             
                 #cap fps to MAX_FPS
                 diff = 1/MAX_FPS-(time.time() - frame_start)
