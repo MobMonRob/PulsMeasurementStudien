@@ -14,10 +14,10 @@ if __name__ == '__main__':
     start_frame = np.ones((480, 640))*255
     cv2.imshow(WINDOW_NAME, start_frame)
     cv2.waitKey(1)
-
+    
     # Define the codec and create VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
-
+    fourcc = cv2.VideoWriter_fourcc(*'FFV1')
+    #fourcc = -1
     # scan for all available cameras
     cameras = CameraFinder.get_available_cameras()
     print('Found {} cameras.'.format(len(cameras)))
@@ -57,5 +57,11 @@ if __name__ == '__main__':
             elif key_pressed == 113:  # 'q' (quit)
                 print('PRESSED: q')
                 player.stop()
+            elif key_pressed == 102: # 'f' (toogle face detection)
+                print('PRESSED: f')
+                player.toogle_face_detection()
+            elif key_pressed == 112: # 'p' (toogle pulse measure)
+                print('PRESSED: p')
+                player.toogle_pulse_measure()
 
     cv2.destroyAllWindows()

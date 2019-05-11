@@ -6,6 +6,7 @@ class Camera:
     def __init__(self):
         self.backend = None
         self.camera = None
+        self.isColor = None
 
     def read(self):
         raise NotImplementedError("Please Implement this method")
@@ -36,6 +37,8 @@ class OpenCVCamera(Camera):
 
     def __init_camera__(self, camera_index):
         self.camera = cv2.VideoCapture(camera_index)
+        self.camera.set(cv2.CAP_PROP_AUTO_WB,0)
+        self.camera.set(cv2.CAP_PROP_SETTINGS,1)
 
     def open(self):
         self.__init_camera__(self.camera_index)
@@ -52,14 +55,18 @@ class OpenCVCamera(Camera):
             self.camera.release()
 
     def is_color(self):
-        while True:
-            ret, frame = self.read()
-            if ret:
-                if len(frame.shape) == 3:
-                    return True
-                else:
-                    return False
-                    
+        if self.isColor == None:
+            while True:
+                ret, frame = self.read()
+                if ret:
+                    if len(frame.shape) == 3:
+                        self.isColor = True
+                        return True
+                    else:
+                        self.isColor = False
+                        return False
+        return self.isColor
+
 class BaslerCamera(Camera):
     def __init__(self, backend, camera_index):
         super().__init__()

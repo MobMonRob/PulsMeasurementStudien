@@ -3,8 +3,11 @@ import numpy as np
 import collections
 import time
 import datetime
-from utils import average
+from gen_utils import average
 import threading
+from tensorflow_face_detection.tensorflow_face_detection import TensoflowFaceDector
+from pulse_measure import FindFaceGetPulse
+
 
 MAX_FPS = 60
 
@@ -22,7 +25,11 @@ class VideoPlayer():
         self.time_recording_stopped = None
         self.fourcc = fourcc
         self.run_thread = None
-
+        self.detect_faces = False
+        #self.face_detection = TensoflowFaceDector()
+        self.measure_pulse = False
+        self.pulse_processor = None
+        
         # Define the font type for opencv
         self.font_type = cv2.FONT_HERSHEY_SIMPLEX
         self.font_scale = 0.55
@@ -37,6 +44,7 @@ class VideoPlayer():
         self.camera_defect = False
         self.frame_times = collections.deque(maxlen=MAX_FPS)
         self.frames = []
+        
 
     def change_camera(self, camera):
         if self.camera != None:
@@ -61,7 +69,20 @@ class VideoPlayer():
             ret, frame = self.camera.read()
             if ret:
                 failed_frames_counter = 0
-                             
+                frame = cv2.flip(frame,1)
+                      
+                if len(frame.shape) != 3:
+                    frame = cv2.merge((frame, frame, frame)) 
+
+                #if self.detect_faces:                    
+                    #frame = self.face_detection.detect_face(frame)
+
+                if self.measure_pulse:
+                    
+
+                    self.pulse_processor.frame_in = frame
+                    self.pulse_processor.run()
+
                 if self.recording:
                     self._record_frame(frame)
 
@@ -69,11 +90,11 @@ class VideoPlayer():
                     self.add_overlay_to_frame(frame)
 
                 cv2.imshow(self.window_name, frame)
-                #cv2.waitKey(1)
-            
-                #cap fps to MAX_FPS
+                # cv2.waitKey(1)
+
+                # cap fps to MAX_FPS
                 diff = 1/MAX_FPS-(time.time() - frame_start)
-                time.sleep(0 if diff < 0 else diff)        
+                time.sleep(0 if diff < 0 else diff)
 
                 self.frame_times.append((time.time() - frame_start))
 
@@ -93,26 +114,31 @@ class VideoPlayer():
             cv2.putText(frame, text,
                         (self.width-self.font_margin - text_size[0][0], self.font_margin), self.font_type, self.font_scale, self.font_color, self.font_thickness, cv2.LINE_AA)
 
-    def _record_frame(self, frame):           
+    def _record_frame(self, frame):
         self.frames.append(np.copy(frame))
 
     def _save_recording(self):
+        print('Saving recording...')
         record_time = self.time_recording_stopped - self.time_recording_started
 
         date = datetime.datetime.fromtimestamp(
             time.time()).strftime('%Y_%m_%d-%H_%M_%S')
         out = cv2.VideoWriter(date + '.avi', self.fourcc, int(len(self.frames)/record_time),
-                              (self.width, self.height), isColor=self.camera.is_color())
+                              (self.width, self.height), isColor=True)#self.camera.is_color())
 
         for frame in self.frames:
             out.write(frame)
         self.frames.clear()
         out.release()
+        print('Video saved!')
 
     def stop(self):
         self.playing = False
         self.run_thread.join()
         self.camera.close()
+
+    def toogle_face_detection(self):
+        self.detect_faces = not self.detect_faces
 
     def toogle_recording(self):
         if self.recording:
@@ -122,3 +148,10 @@ class VideoPlayer():
         else:
             self.recording = True
             self.time_recording_started = time.time()
+
+    def toogle_pulse_measure(self):
+        if self.measure_pulse:
+            self.pulse_processor = None
+        else:
+            self.pulse_processor = FindFaceGetPulse(bpm_limits=[50, 160], data_spike_limit=2500., face_detector_smoothness=10.,frame_width = self.width,frame_height = self.height)
+        self.measure_pulse = not self.measure_pulse
