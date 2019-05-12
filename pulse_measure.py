@@ -4,14 +4,14 @@ import cv2
 import pylab
 import os
 import sys
+from scipy import signal
 
-class FindFaceGetPulse(object):
 
-    def __init__(self, bpm_limits=[], data_spike_limit=250,
-                 face_detector_smoothness=10, frame_width=640, frame_height=480):
+class PulseMeasurement(object):
 
-        self.frame_in = np.zeros((10, 10))
-        self.frame_out = np.zeros((10, 10))
+    def __init__(self, buffer_size=250):
+
+        self.roi = np.zeros((10, 10))
         self.fps = 0
         self.buffer_size = 250
         self.data_buffer = []
@@ -23,103 +23,133 @@ class FindFaceGetPulse(object):
         self.slices = [[0]]
         self.t0 = time.time()
         self.bpms = []
-        self.bpm = 0        
+        self.bpm = 0
+        self.MAX_BPM = 180
+        self.MIN_BPM = 50
 
-        roi_width = frame_width*0.5
-        roi_height = frame_height*0.3       
-        self.forehead = [int(frame_width/2-roi_width/2), int(frame_height /
-                                                               3-roi_height/2), int(roi_width), int(roi_height)]
-        self.last_center = np.array([0, 0])
-        self.last_wh = np.array([0, 0])
-        self.output_dim = 13
+    def extractGreenColorChannel(self, frame):
+        return frame[:, :, 1]
 
-        self.idx = 1
-
-    def draw_rect(self, rect, col=(0, 255, 0)):
-        x, y, w, h = rect
-        cv2.rectangle(self.frame_out, (x, y), (x + w, y + h), col, 1)   
-
-    def get_subface_means(self, coord):
-        x, y, w, h = coord
-        subframe = self.frame_in[y:y + h, x:x + w, :]
-        v1 = np.mean(subframe[:, :, 0])
-        v2 = np.mean(subframe[:, :, 1])
-        v3 = np.mean(subframe[:, :, 2])
-
-        return (v1 + v2 + v3) / 3.    
-
-    def run(self):
+    def run(self, roi):
         self.times.append(time.time() - self.t0)
-        self.frame_out = self.frame_in
-        self.gray = cv2.equalizeHist(cv2.cvtColor(self.frame_in,
-                                                  cv2.COLOR_BGR2GRAY))   
-       
-        self.draw_rect(self.forehead)
-        vals = self.get_subface_means(self.forehead)
+        self.roi = roi
+        self.gray = cv2.equalizeHist(cv2.cvtColor(roi,
+                                                  cv2.COLOR_BGR2GRAY))
 
-        self.data_buffer.append(vals)
+        # calculate mean green from roi
+        green_mean = np.mean(self.extractGreenColorChannel(roi))
+        self.data_buffer.append(green_mean)
+
+        # get number of frames processed
         L = len(self.data_buffer)
+
+        # remove sudden changes, if the avg value change is over 10, use the previous green mean instead
+        if(abs(green_mean-np.mean(self.data_buffer)) > 10 and L > 99):
+            self.data_buffer[-1] = self.data_buffer[-2]
+
+        # only use a max amount of frames. Determined by buffer_size
         if L > self.buffer_size:
             self.data_buffer = self.data_buffer[-self.buffer_size:]
             self.times = self.times[-self.buffer_size:]
             L = self.buffer_size
 
+        # create array from average green values of all processed frames
         processed = np.array(self.data_buffer)
-        self.samples = processed
+
+        # start heart rate measurment after 10 frames
         if L > 10:
-            self.output_dim = processed.shape[0]
-
+            # calculate fps
             self.fps = float(L) / (self.times[-1] - self.times[0])
+
+            # calculate equidistant frame times
             even_times = np.linspace(self.times[0], self.times[-1], L)
-            interpolated = np.interp(even_times, self.times, processed)
+
+            # remove linear trend on processed data to avoid interference of light change
+            processed = signal.detrend(processed)
+
+            # interpolate the values for the even times
+            interpolated = np.interp(x=even_times, xp=self.times, fp=processed)
+
+            # apply hamming window to make the signal become more periodic //TODO: not sure why this is useful
             interpolated = np.hamming(L) * interpolated
-            interpolated = interpolated - np.mean(interpolated)
-            raw = np.fft.rfft(interpolated)
-            phase = np.angle(raw)
-            self.fft = np.abs(raw)
-            self.freqs = float(self.fps) / L * np.arange(L / 2 + 1)
 
+            # normalize the interpolation
+            norm = interpolated/np.linalg.norm(interpolated)
+
+            # do a fast fourier transformation on the (real) interpolated values
+            raw = np.fft.rfft(norm)
+
+            # get amplitude spectrum
+            self.fft = np.abs(raw)**2
+
+            # create a list for mapping the fft frequencies to the correct bpm
+            self.freqs = (float(self.fps) / L) * np.arange(L / 2 + 1)
             freqs = 60. * self.freqs
-            idx = np.where((freqs > 50) & (freqs < 180))
 
-            if(len(idx[0]) == 0):               
-                return
-            
-            pruned = self.fft[idx]
-            phase = phase[idx]
+            # find indeces where the frequencey is within the expected heart rate range
+            idx = np.where((freqs > self.MIN_BPM) & (freqs < self.MAX_BPM))
 
-            pfreq = freqs[idx]
-            self.freqs = pfreq
-            self.fft = pruned
-            idx2 = np.argmax(pruned)
+            # reduce fft to "interesting" frequencies
+            self.fft = self.fft[idx]
 
-            t = (np.sin(phase[idx2]) + 1.) / 2.
-            t = 0.9 * t + 0.1
-            alpha = t
-            beta = 1 - t
+            # reduce frequency list to "interesting" frequencies
+            self.freqs = freqs[idx]
 
-            self.bpm = self.freqs[idx2]
-            self.idx += 1
+            # find the frequency with the highest amplitude
+            if  len(self.fft) > 0: 
+                idx2 = np.argmax(self.fft)
+                self.bpm = self.freqs[idx2]
+                self.bpms.append(self.bpm)
+                self.visualize_heart_rate(raw, idx, idx2)
 
-            x, y, w, h = self.forehead
-            r = alpha * self.frame_in[y:y + h, x:x + w, 0]
-            g = alpha * \
-                self.frame_in[y:y + h, x:x + w, 1] + \
-                beta * self.gray[y:y + h, x:x + w]
-            b = alpha * self.frame_in[y:y + h, x:x + w, 2]
-            self.frame_out[y:y + h, x:x + w] = cv2.merge([r,
-                                                          g,
-                                                          b])
-            x1, y1, w1, h1 = self.forehead
-            self.slices = [np.copy(self.frame_out[y1:y1 + h1, x1:x1 + w1, 1])]
-            col = (100, 255, 100)
-            gap = (self.buffer_size - L) / self.fps
-            # self.bpms.append(bpm)
-            # self.ttimes.append(time.time())
-            if gap:
-                text = "(est: %0.1f bpm, wait %0.0f s)" % (self.bpm, gap)
-            else:
-                text = "(est: %0.1f bpm)" % (self.bpm)
-            tsize = 1
-            cv2.putText(self.frame_out, text,
-                        (int(x - w / 2), int(y)), cv2.FONT_HERSHEY_SIMPLEX, tsize, col,thickness = 2)
+        self.samples = processed
+
+        #visualize data
+        if L == self.buffer_size:
+            green_mean_visualized = np.zeros((100,100,3))
+            green_mean_visualized[:,:,2] += (self.data_buffer[-1] - np.mean(self.data_buffer))
+            cv2.imshow('test',green_mean_visualized)
+
+        return self.roi
+
+    def visualize_heart_rate(self, raw, idx, idx2):
+        phase = np.angle(raw)
+        phase = phase[idx]
+
+        t = (np.sin(phase[idx2]) + 1.) / 2.
+        t = 0.9 * t + 0.1
+        alpha = t
+        beta = 1 - t
+
+        r = alpha * self.roi[:, :, 0]
+        g = alpha * self.roi[:, :, 1] + \
+            beta * self.gray
+        b = alpha * self.roi[:, :, 2]
+        self.roi = cv2.merge([r, g, b])
+        self.slices = [np.copy(self.roi[:, :, 1])]
+
+    def butter_bandpass(self, lowcut, highcut, fs, order=5):
+        nyq = 0.5 * fs
+        low = lowcut / nyq
+        high = highcut / nyq
+        b, a = signal.butter(order, [low, high], btype='band')
+        return b, a
+
+    def butter_bandpass_filter(self, data, lowcut, highcut, fs, order=5):
+        b, a = self.butter_bandpass(lowcut, highcut, fs, order=order)
+        y = signal.lfilter(b, a, data)
+        return y
+
+    def reset(self):
+        self.frame_in = np.zeros((10, 10, 3), np.uint8)
+        self.frame_ROI = np.zeros((10, 10, 3), np.uint8)
+        self.frame_out = np.zeros((10, 10, 3), np.uint8)
+        self.samples = []
+        self.times = []
+        self.data_buffer = []
+        self.fps = 0
+        self.fft = []
+        self.freqs = []
+        self.t0 = time.time()
+        self.bpm = 0
+        self.bpms = []

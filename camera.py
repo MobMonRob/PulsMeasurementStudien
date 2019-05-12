@@ -26,7 +26,7 @@ class Camera:
                 height = len(frame)
                 width = len(frame[0])
                 return((width, height))
-        return((0,0))
+        return((0, 0))
 
 
 class OpenCVCamera(Camera):
@@ -37,8 +37,6 @@ class OpenCVCamera(Camera):
 
     def __init_camera__(self, camera_index):
         self.camera = cv2.VideoCapture(camera_index)
-        self.camera.set(cv2.CAP_PROP_AUTO_WB,0)
-        self.camera.set(cv2.CAP_PROP_SETTINGS,1)
 
     def open(self):
         self.__init_camera__(self.camera_index)
@@ -67,6 +65,7 @@ class OpenCVCamera(Camera):
                         return False
         return self.isColor
 
+
 class BaslerCamera(Camera):
     def __init__(self, backend, camera_index):
         super().__init__()
@@ -80,7 +79,7 @@ class BaslerCamera(Camera):
 
     def __init_camera__(self):
         tlFactory = pylon.TlFactory.GetInstance()
-        devices = tlFactory.EnumerateDevices()       
+        devices = tlFactory.EnumerateDevices()
         _camera = pylon.InstantCamera()
         _camera.Attach(tlFactory.CreateDevice(devices[self.camera_index]))
         return _camera
