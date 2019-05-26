@@ -1,4 +1,4 @@
-from camera import Camera, BaslerCamera, OpenCVCamera
+from camera import Camera, BaslerCamera, OpenCVCamera, FileCamera
 import cv2
 from pypylon import pylon
 
@@ -82,3 +82,9 @@ class CameraFinder(object):
         cameras.extend(CameraFinder.get_available_basler_cameras())
 
         return cameras
+
+    @staticmethod
+    def create_file_camera(path):
+        camera = FileCamera(path)
+        return camera
+    
