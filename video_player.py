@@ -1,20 +1,20 @@
+import collections
+import datetime
+import math
+import threading
+import time
+
 import cv2
 import numpy as np
-import collections
-import time
-import datetime
+
 from gen_utils import average, draw_rect
-import threading
-from tensorflow_face_detection.tensorflow_face_detection import TensoflowFaceDector
 from pulse_measure import PulseMeasurement
 from region_of_interest import RegionOfInterest
-import math
-
 
 MAX_FPS = 30
 
 
-class VideoPlayer():
+class VideoPlayer:
 
     def __init__(self, camera, window_name, fourcc):
         self.camera = None
@@ -48,13 +48,14 @@ class VideoPlayer():
         self.camera_defect = False
         self.frame_times = collections.deque(maxlen=math.ceil(MAX_FPS))
         self.frames = []
-        self.roi_width = self.width*0.1
-        self.roi_height = self.height*0.15
-        self.roi = RegionOfInterest(int(self.width/2-self.roi_width/2), int(self.height /
-                                                                            3-self.roi_height/2), int(self.roi_width), int(self.roi_height), self.width, self.height)
+        self.roi_width = self.width * 0.1
+        self.roi_height = self.height * 0.15
+        self.roi = RegionOfInterest(int(self.width / 2 - self.roi_width / 2), int(self.height /
+                                                                                  3 - self.roi_height / 2),
+                                    int(self.roi_width), int(self.roi_height), self.width, self.height)
 
     def change_camera(self, camera):
-        if self.camera != None:
+        if self.camera is not None:
             self.camera.close()
 
         self.__init_camera__(camera)
@@ -63,7 +64,7 @@ class VideoPlayer():
         self.overlay_active = not self.overlay_active
 
     def play(self):
-        if(self.playing):
+        if self.playing:
             self.stop()
         self.playing = True
         self.run_thread = threading.Thread(target=self._display_camera)
@@ -85,14 +86,14 @@ class VideoPlayer():
                         frame = cv2.merge((frame, frame, frame))
 
                     if self.measure_pulse:
-                        if self.tracker == None:
+                        if self.tracker is None:
                             print('Tracking initialized')
-                            #self.tracker = cv2.TrackerCSRT_create()
+                            # self.tracker = cv2.TrackerCSRT_create()
                             self.tracker = cv2.TrackerMedianFlow_create()
                             self.tracker.init(frame, self.roi.to_tuple())
                             # analyze max 5 seconds
                             self.pulse_processor.buffer_size = math.ceil(
-                                MAX_FPS*5)  # round(1 / average(self.frame_times))*5
+                                MAX_FPS * 5)  # round(1 / average(self.frame_times))*5
 
                             # open output files
                             means_file = open('mean.csv', 'w')
@@ -111,16 +112,18 @@ class VideoPlayer():
                             if ok:
                                 x, y, w, h = self.roi.to_tuple()
                                 pulse_visualized = self.pulse_processor.run(
-                                    frame[y:y+h, x:x+w, :])
-                                frame[y:y+h, x:x+w, :] = pulse_visualized
+                                    frame[y:y + h, x:x + w, :])
+                                frame[y:y + h, x:x + w, :] = pulse_visualized
 
                                 means_file.write('{},{},{},{},{},{}\n'.format(
                                     self.camera.get_frame_position(), x, y, w, h, self.pulse_processor.data_buffer[-1]))
                                 means_file.flush()
 
-                                if(len(self.pulse_processor.data_buffer) == self.pulse_processor.buffer_size):
-                                    fft_file.write('{},{},{},{},{},{},{},{},{},{},{}\n'.format(self.camera.get_frame_position(
-                                    )-MAX_FPS*5-1, self.camera.get_frame_position(), *self.pulse_processor.fft))
+                                if len(self.pulse_processor.data_buffer) == self.pulse_processor.buffer_size:
+                                    fft_file.write(
+                                        '{},{},{},{},{},{},{},{},{},{},{}\n'.format(self.camera.get_frame_position(
+                                        ) - MAX_FPS * 5 - 1, self.camera.get_frame_position(),
+                                                                                    *self.pulse_processor.fft))
                                     fft_file.flush()
                                     bpm_file.write('{},{}\n'.format(
                                         self.camera.get_frame_position(), self.pulse_processor.bpm))
@@ -142,7 +145,7 @@ class VideoPlayer():
                     # cv2.waitKey(1)
 
                     # cap fps to MAX_FPS
-                    diff = 1/MAX_FPS-(time.time() - frame_start)
+                    diff = 1 / MAX_FPS - (time.time() - frame_start)
                     time.sleep(0 if diff < 0 else diff)
 
                     self.frame_times.append((time.time() - frame_start))
@@ -152,7 +155,7 @@ class VideoPlayer():
                     if failed_frames_counter > 100:
                         self.camera_defect = True
                         break
-            #playback is paused
+            # playback is paused
             else:
                 frame = np.copy(raw_frame)
                 if self.overlay_active:
@@ -163,37 +166,41 @@ class VideoPlayer():
     def add_overlay_to_frame(self, frame):
         draw_rect(frame, self.roi.to_tuple())
         self.print_heart_beat(frame)
-        cv2.putText(frame, 'FPS:'+str(round(1 / average(self.frame_times), 1)),
-                    (self.font_margin, self.font_margin), self.font_type, self.font_scale, self.font_color, self.font_thickness, cv2.LINE_AA)
+        cv2.putText(frame, 'FPS:' + str(round(1 / average(self.frame_times), 1)),
+                    (self.font_margin, self.font_margin), self.font_type, self.font_scale, self.font_color,
+                    self.font_thickness, cv2.LINE_AA)
         if self.recording:
             text = 'Recording'
             text_size = cv2.getTextSize(
                 text, self.font_type, self.font_scale, self.font_thickness)
             cv2.putText(frame, text,
-                        (self.width-self.font_margin - text_size[0][0], self.font_margin), self.font_type, self.font_scale, self.font_color, self.font_thickness, cv2.LINE_AA)
+                        (self.width - self.font_margin - text_size[0][0], self.font_margin), self.font_type,
+                        self.font_scale, self.font_color, self.font_thickness, cv2.LINE_AA)
 
         text = 'Frame:{}/{}'.format(self.camera.get_frame_position(),
                                     self.camera.get_frame_count())
         text_size = cv2.getTextSize(
             text, self.font_type, self.font_scale, self.font_thickness)
         cv2.putText(frame, text,
-                    (self.font_margin, self.height - self.font_margin - text_size[0][1]), self.font_type, self.font_scale, self.font_color, self.font_thickness, cv2.LINE_AA)
+                    (self.font_margin, self.height - self.font_margin - text_size[0][1]), self.font_type,
+                    self.font_scale, self.font_color, self.font_thickness, cv2.LINE_AA)
 
     def print_heart_beat(self, frame):
         col = (100, 255, 100)
         percent = len(self.pulse_processor.data_buffer) / \
-            self.pulse_processor.buffer_size
+                  self.pulse_processor.buffer_size
 
         if percent < 1:
             text = "Initializing...%0.1f %% (bpm %0.1f)" % (
-                percent*100, self.pulse_processor.bpm)
+                percent * 100, self.pulse_processor.bpm)
         else:
-            text = "(est: %0.1f bpm)" % (self.pulse_processor.bpm)
+            text = "(est: %0.1f bpm)" % self.pulse_processor.bpm
 
         text_size = cv2.getTextSize(
             text, self.font_type, self.font_scale, self.font_thickness)
         cv2.putText(frame, text,
-                    (self.width//2 - text_size[0][0]//2, self.font_margin), self.font_type, self.font_scale, self.font_color, self.font_thickness, cv2.LINE_AA)
+                    (self.width // 2 - text_size[0][0] // 2, self.font_margin), self.font_type, self.font_scale,
+                    self.font_color, self.font_thickness, cv2.LINE_AA)
 
     def _record_frame(self, frame):
         self.frames.append(np.copy(frame))
@@ -204,7 +211,7 @@ class VideoPlayer():
 
         date = datetime.datetime.fromtimestamp(
             time.time()).strftime('%Y_%m_%d-%H_%M_%S')
-        out = cv2.VideoWriter(date + '.avi', self.fourcc, int(len(self.frames)/record_time),
+        out = cv2.VideoWriter(date + '.avi', self.fourcc, int(len(self.frames) / record_time),
                               (self.width, self.height), isColor=True)  # self.camera.is_color())
 
         for frame in self.frames:
@@ -234,8 +241,14 @@ class VideoPlayer():
         self.pulse_processor.reset()
         self.tracker = None
         if self.measure_pulse:
-            self.roi = RegionOfInterest(int(self.width/2-self.roi_width/2), int(self.height /
-                                                                                3-self.roi_height/2), int(self.roi_width), int(self.roi_height), self.width, self.height)
+            self.roi = RegionOfInterest(
+                int(self.width / 2 - self.roi_width / 2),
+                int(self.height / 3 - self.roi_height / 2),
+                int(self.roi_width),
+                int(self.roi_height),
+                self.width,
+                self.height
+            )
         self.measure_pulse = not self.measure_pulse
 
     def toogle_pause(self):

@@ -1,14 +1,9 @@
-import numpy as np
 import time
-import cv2
-import pylab
-import os
-import sys
-from scipy import signal
-from matplotlib.ticker import FuncFormatter
-from matplotlib.ticker import FormatStrFormatter
 
+import cv2
 import matplotlib.pyplot as plt
+import numpy as np
+from scipy import signal
 
 
 class PulseMeasurement(object):
@@ -47,7 +42,7 @@ class PulseMeasurement(object):
         L = len(self.data_buffer)
 
         # remove sudden changes, if the avg value change is over 10, use the previous green mean instead
-        if(abs(green_mean-np.mean(self.data_buffer)) > 10 and L > 99):
+        if (abs(green_mean - np.mean(self.data_buffer)) > 10 and L > 99):
             self.data_buffer[-1] = self.data_buffer[-2]
 
         # only use a max amount of frames. Determined by buffer_size
@@ -62,30 +57,30 @@ class PulseMeasurement(object):
         # start heart rate measurment after 10 frames
         if L == self.buffer_size:
             # calculate fps
-            #self.fps = float(L) / (self.times[-1] - self.times[0])            
+            # self.fps = float(L) / (self.times[-1] - self.times[0])
             self.fps = 30
 
             # calculate equidistant frame times
-            #even_times = np.linspace(self.times[0], self.times[-1], L)            
+            # even_times = np.linspace(self.times[0], self.times[-1], L)
 
             # remove linear trend on processed data to avoid interference of light change
             processed = signal.detrend(processed)
 
             # interpolate the values for the even times
-            #interpolated = np.interp(x=even_times, xp=self.times, fp=processed)          
+            # interpolated = np.interp(x=even_times, xp=self.times, fp=processed)
             interpolated = processed
 
             # apply hamming window to make the signal become more periodic
             interpolated = np.hamming(L) * interpolated
 
             # normalize the interpolation
-            norm = interpolated/np.linalg.norm(interpolated)
+            norm = interpolated / np.linalg.norm(interpolated)
 
             # do a fast fourier transformation on the (real) interpolated values
             raw = np.fft.rfft(norm)
 
             # get amplitude spectrum
-            self.fft = np.abs(raw)**2
+            self.fft = np.abs(raw) ** 2
 
             # create a list for mapping the fft frequencies to the correct bpm
             self.freqs = (float(self.fps) / L) * np.arange(L / 2 + 1)
@@ -101,7 +96,7 @@ class PulseMeasurement(object):
             self.freqs = freqs[idx]
 
             # find the frequency with the highest amplitude
-            if  len(self.fft) > 0: 
+            if len(self.fft) > 0:
                 idx2 = np.argmax(self.fft)
                 self.bpm = self.freqs[idx2]
                 self.bpms.append(self.bpm)
@@ -109,31 +104,31 @@ class PulseMeasurement(object):
 
         self.samples = processed
 
-        #visualize data
+        # visualize data
         # if L == self.buffer_size:
         #     green_mean_visualized = np.zeros((100,100,3))
         #     green_mean_visualized[:,:,2] += (self.data_buffer[-1] - np.mean(self.data_buffer))
         #     cv2.imshow('test',green_mean_visualized)
 
-        #plot fourrier transform
+        # plot fourrier transform
         if L == self.buffer_size:
             index = np.arange(len(self.data_buffer))
-            
+
             data = self.data_buffer - np.mean(self.data_buffer)
 
             plt.clf()
-            plt.subplot(2,1,1)
+            plt.subplot(2, 1, 1)
             plt.plot(index, data, '.-')
             plt.title('Green value over time')
             plt.ylabel('Green value')
             plt.xlabel('last x frames')
 
             index = np.arange(len(self.freqs))
-            plt.subplot(2,1,2)
+            plt.subplot(2, 1, 2)
             plt.bar(index, self.fft)
             plt.xlabel('Frequencies (bpm)', fontsize=10)
             plt.ylabel('Amplitude', fontsize=10)
-            plt.xticks(index, [round(x,2) for x in self.freqs], fontsize=10, rotation=30)            
+            plt.xticks(index, [round(x, 2) for x in self.freqs], fontsize=10, rotation=30)
             plt.title('Fourier Transformation')
             plt.draw()
             plt.pause(0.001)

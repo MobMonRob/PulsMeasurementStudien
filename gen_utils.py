@@ -1,5 +1,6 @@
 import cv2
 
+
 def average(lst):
     if len(lst) > 0:
         return sum(lst) / len(lst)
